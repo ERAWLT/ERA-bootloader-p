@@ -1,0 +1,11 @@
+build/
+CMakeCache.txt
+CMakeFiles/
+Makefile
+*.cmake
+*.pem
+*.bin
+src/test-mcuboot
+.DS_Store
+settings.json
+*.a

@@ -1,0 +1,67 @@
+{
+    "version": 3,
+    "configurePresets": [
+        {
+            "name": "custom",
+            "displayName": "Developer presets",
+	        "binaryDir": "./build-${presetName}-$env{BOARD_REV}",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "USE_HW_SE": "ON",
+                "HW_SE_IS_NOT_LOCKED": "ON",
+                "CONFIG_DEBUG_UART_ENABLED": "OFF",
+                "CONFIG_SHELL_ENABLED": "OFF",
+                "BUILD_TEST_FIRMWARE": "OFF",
+                "HWLT_BOARD_REVISION": "$env{BOARD_REV}"
+            },
+            "environment": {
+                "BOARD_REV": "h7v3"
+            }
+        },
+        {
+            "name": "debug",
+            "displayName": "Build for debug",
+	        "binaryDir": "./build-${presetName}-$env{BOARD_REV}",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "USE_HW_SE": "ON",
+                "HW_SE_IS_NOT_LOCKED": "ON",
+                "HWLT_BOARD_REVISION": "$env{BOARD_REV}",
+                "BUILD_TEST_FIRMWARE": "ON"
+            },
+            "environment": {
+                "BOARD_REV": "h7v3"
+            }
+        },
+        {
+            "name": "release",
+            "displayName": "Build release.",
+	        "binaryDir": "./build-${presetName}-$env{BOARD_REV}",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "USE_HW_SE": "ON",
+                "HW_SE_IS_NOT_LOCKED": "OFF",
+                "CONFIG_DEBUG_UART_ENABLED": "OFF",
+                "CONFIG_SHELL_ENABLED": "OFF",
+                "HWLT_BOARD_REVISION": "$env{BOARD_REV}"
+            },
+            "environment": {
+                "BOARD_REV": "h7v3"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "custom",
+            "configurePreset": "custom"
+        },
+        {
+            "name": "debug",
+            "configurePreset": "debug"
+        },
+        {
+            "name": "release",
+            "configurePreset": "release"
+        }
+    ]
+}

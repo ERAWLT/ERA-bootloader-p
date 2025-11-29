@@ -1,0 +1,9 @@
+{
+    "files.associations": {
+        "openbl_uart_if.h": "c",
+        "openbl_core.h": "c",
+        "stm32h7xx_hal.h": "c",
+        "openbl_task.h": "c",
+        "openbl_uart_cmd.h": "c"
+    }
+}

@@ -1,0 +1,1 @@
+pip3 install click cryptography cbor intelhex pyyaml

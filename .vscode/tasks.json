@@ -1,0 +1,211 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+        {
+            "type": "shell",
+            "label": "build debug v1",
+            "command": "cd debug && cmake -DSE_DEV_BOARD=OFF -DCMAKE_BUILD_TYPE=Debug -DHWLT_BOARD_REVISION=h7v1 -B. -S.. --fresh && make -j8",
+            "group": "build"
+        },
+        {
+            "type": "shell",
+            "label": "build debug v2",
+            "command": "mkdir -p debugV2 && cd debugV2 && cmake -DUSE_HW_SE=OFF -DCMAKE_BUILD_TYPE=Debug -DHWLT_BOARD_REVISION=h7v2 -DBUILD_TEST_FIRMWARE=ON -B. -S.. --fresh && make -j8",
+            "group": "build"
+        },
+        {
+            "label": "Flash DEBUG v1",
+            "type": "shell",
+            "command": "openocd -f ${workspaceFolder}/.vscode/openocd_stm32h7.cfg -c \"program debug/src/era-bootloader.bin verify  0x08000000\" -c \"reset halt\" -c shutdown",
+            "problemMatcher": [],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "build debug v1"
+            ]
+        },
+        {
+            "label": "Flash DEBUG v2",
+            "type": "shell",
+            "command": "openocd -f ${workspaceFolder}/.vscode/openocd_stm32h7.cfg -c \"program debugV2/src/era-bootloader.bin verify  0x08000000\" -c \"reset halt\" -c shutdown",
+            "problemMatcher": [],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "dependsOrder": "sequence",                                                                                                              
+            "dependsOn": [
+                "build debug v2"
+            ]
+        },
+        {
+            "label": "Erase MF slots from bank 1",
+            "type": "shell",
+            "command": "openocd -f ${workspaceFolder}/.vscode/openocd_stm32h7.cfg -c init -c \"reset halt\" -c \"flash erase_sector 1 0 4\" -c shutdown",
+            "problemMatcher": []
+        },
+        {
+            "label": "Erase SS",
+            "type": "shell",
+            "command": "openocd -f ${workspaceFolder}/.vscode/openocd_stm32h7.cfg -c init -c \"reset halt\" -c \"flash erase_sector 1 5 7\" -c shutdown",
+            "problemMatcher": []
+        },
+        {
+            "label": "clang check",
+            "type": "shell",
+            "command": "clang-format-15 -style=file --dry-run -output-replacements-xml $(ls -d * */* */*/* | grep -E '\.c$|\.cpp$|\.h$') 2>&1 | tee ./clnag_output.txt",
+            "problemMatcher": []
+        },
+        {
+            "label": "Open uart",
+            "type": "shell",
+            "command": "picocom -b 115200 /dev/ttyACM1",
+            "problemMatcher": []
+        },
+        {
+            "label": "start debug",
+            "type": "shell",
+            "command": "openocd -f ${workspaceFolder}/.vscode/openocd_stm32h7.cfg  -c \"bindto 0.0.0.0\"  -c \"gdb_port 50000\" -c \"tcl_port 50001\" -c \"telnet_port 50002\"",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": {
+                "kind": "none",
+                "isDefault": true
+            },
+            "isBackground": true
+        },
+        {
+            "label": "close debug",
+            "command": "killall -9 openocd",
+            "type": "shell"
+        },
+        {
+            "label": "Reset stm32",
+            "type": "shell",
+            "command": "openocd -f ${workspaceFolder}/.vscode/openocd_stm32h7.cfg -c init -c \"reset run\" -c shutdown",
+            "problemMatcher": []
+        },
+        {
+            "label": "Halt stm32",
+            "type": "shell",
+            "command": "openocd -f ${workspaceFolder}/.vscode/openocd_stm32h7.cfg -c init -c \"reset halt\" -c shutdown",
+            "problemMatcher": []
+        },
+        {
+            "type": "shell",
+            "label": "build releaseNoSe",
+            "command": "mkdir -p releaseNoSe && cd releaseNoSe && cmake -DCMAKE_BUILD_TYPE=ReleaseUart -DHWLT_BOARD_REVISION=h7v2 -DUSE_HW_SE=OFF -B. -S.. --fresh && make -j8",
+            "group": "build"
+        },
+        {
+            "label": "Flash releaseNoSe",
+            "type": "shell",
+            "command": "st-flash --connect-under-reset write releaseNoSe/src/era-bootloader_signed.bin 0x8020000 ",
+            "problemMatcher": [],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "build releaseNoSe"
+            ]
+        },
+        {
+            "type": "shell",
+            "label": "build release BLR via preset",
+            "command": "cmake --preset release && cmake --build --preset release -j 8",
+            "group": "build"
+        },
+        {
+            "type": "shell",
+            "label": "build custom BLR via preset",
+            "command": "cmake --preset custom && cmake --build --preset custom -j 8",
+            "group": "build"
+        },
+        {
+            "label": "Flash preset release BLR",
+            "type": "shell",
+            "command": "st-flash --connect-under-reset write build-release-h7v3/src/era-bootloader_signed.bin 0x8020000",
+            "problemMatcher": [],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "build release BLR via preset"
+            ]
+        },
+        {
+            "label": "Flash preset custom BLR",
+            "type": "shell",
+            "command": "st-flash --connect-under-reset write build-custom-h7v1/src/era-bootloader.bin 0x8000000",
+            "problemMatcher": [],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "dependsOrder": "sequence",
+            "dependsOn": [
+                "build custom BLR via preset"
+            ]
+        },
+        {
+            "type": "shell",
+            "label": "write image ok ",
+            "command": "openocd -f ${workspaceFolder}/.vscode/openocd_stm32h7.cfg -c init -c \"reset halt\" -c \"flash write_image .vscode/image_status_ok.bin 0x0819ffa0\" -c shutdown",
+        },
+        {
+            "type": "shell",
+            "label": "check size .text",
+            "command": "./hwlt-framework/scripts/size_by_map_sum.sh -f ./build-custom-h7v2/src/output.map | grep img",
+            "problemMatcher": []
+        },
+        {
+            "type": "shell",
+            "label": "build debug BLR via preset",
+            "command": "cmake --preset debug && cmake --build --preset debug -j 8",
+            "group": "build"
+        },
+        {
+            "label": "Flash Complete System",
+            "type": "shell",
+            "command": "echo 'Flashing complete system...' && echo 'Flashing bootstrapper to 0x08000000...' && openocd -f ${workspaceFolder}/.vscode/openocd_stm32h7.cfg -c init -c \"reset halt\" -c \"program \\\"${input:bootstrapperPath}\\\" verify 0x08000000\" -c shutdown && echo 'Flashing bootloader to 0x08020000...' && openocd -f ${workspaceFolder}/.vscode/openocd_stm32h7.cfg -c init -c \"reset halt\" -c \"program \\\"${input:bootloaderPath}\\\" verify 0x08020000\" -c shutdown && echo 'Flashing bootloader copy to 0x08040000...' && openocd -f ${workspaceFolder}/.vscode/openocd_stm32h7.cfg -c init -c \"reset halt\" -c \"program \\\"${input:bootloaderPath}\\\" verify 0x08040000\" -c shutdown && echo 'Flashing main firmware to 0x08060000...' && openocd -f ${workspaceFolder}/.vscode/openocd_stm32h7.cfg -c init -c \"reset halt\" -c \"program \\\"${input:mainFirmwarePath}\\\" verify 0x08060000\" -c \"reset run\" -c shutdown && echo 'Complete system flash finished - device rebooted!'",
+            "problemMatcher": [],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "build"
+        },
+        {
+            "label": "Flash Complete System (Alternative)",
+            "type": "shell",
+            "command": "echo 'Flashing complete system with single OpenOCD session...' && openocd -f ${workspaceFolder}/.vscode/openocd_stm32h7.cfg -c init -c \"reset halt\" -c \"program \\\"${input:bootstrapperPath}\\\" verify 0x08000000\" -c \"echo 'Bootstrapper flashed'\" -c \"program \\\"${input:bootloaderPath}\\\" verify 0x08020000\" -c \"echo 'Bootloader flashed'\" -c \"program \\\"${input:bootloaderPath}\\\" verify 0x08040000\" -c \"echo 'Bootloader copy flashed'\" -c \"program \\\"${input:mainFirmwarePath}\\\" verify 0x08060000\" -c \"echo 'Main firmware flashed'\" -c \"reset run\" -c shutdown && echo 'Complete system flash finished - device rebooted!'",
+            "problemMatcher": [],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "build"
+        }
+    ],
+    "inputs": [
+        {
+            "id": "bootstrapperPath",
+            "description": "Path to bootstrapper binary",
+            "default": "bins/hwlt-bootstrapper-0.bin",
+            "type": "promptString"
+        },
+        {
+            "id": "bootloaderPath", 
+            "description": "Path to bootloader binary",
+            "default": "build-custom-h7v3/src/BL_0.9.73_dev_signed_7558787.bin",
+            "type": "promptString"
+        },
+        {
+            "id": "mainFirmwarePath",
+            "description": "Path to main firmware binary", 
+            "default": "bins/MF.bin",
+            "type": "promptString"
+        }
+    ]
+}

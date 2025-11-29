@@ -1,0 +1,132 @@
+
+name: main-pull-request
+
+on:
+
+  pull_request:
+    branches: [ "main" ]
+
+  workflow_dispatch:
+
+jobs:
+  build_release:
+    runs-on: self-hosted
+    outputs:
+      BUILD_RELEASE: ${{ job.status }}
+    steps:
+    - name: Checkout 
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.TOKEN }}
+        submodules: recursive
+    - name: Create Docker container and build project
+      run: |
+        docker run -d --rm --name dockerenv -u $(id -u ${USER}):$(id -g ${USER}) -v $(pwd):/usr/src/app hw-docker-image:0.1 sleep infinity
+        docker exec dockerenv sh -c "cmake --fresh  -B buildReleaseSe -DCMAKE_BUILD_TYPE=Release -DHWLT_BOARD_REVISION="h7v3" && make -j8 -C buildReleaseSe 2>&1 | tee /usr/src/app/build_log.txt"
+        docker exec dockerenv sh -c "grep -E 'Memory region|FLASH|DTCMRAM|RAM_D1|RAM_D2|RAM_D3|ITCMRAM' /usr/src/app/build_log.txt | grep -E '^[[:space:]]*Memory region|^ *[A-Z]' > /usr/src/app/memory_info.txt"
+        python3 ./scripts/memory_info_format.py
+        docker cp dockerenv:/usr/src/app/memory_info_modified.txt ./memory_info_release_modified.txt
+    - name: Save Memory Info as Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: memory-info
+        path: memory_info_modified.txt
+    - name: Delete docker
+      run: |
+        docker stop dockerenv || true
+        docker rm dockerenv || true
+      if: ${{ always() }}
+    - name: Delete Docker cache and images
+      run: |
+        docker system prune --all -f || true
+
+  Send_status_to_slack:
+    runs-on: self-hosted
+    needs: [build_release]
+    env:
+      BUILD_RELEASE: ${{ needs.build_release.outputs.BUILD_RELEASE }}
+      
+    if: always()
+    steps:
+    - name: Download Memory Info Artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: memory-info
+        
+    - name: Send notification
+      env:
+        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
+      run: |
+       commit_hash=$(echo "${{ github.sha }}" | cut -c 1-7)
+       repo_name=$(echo "${{ github.repository }}")
+       workflow_name=$(echo "${{ github.workflow }}")
+       user=$(echo "${{ github.actor }}")
+
+       if [ "$BUILD_RELEASE" = "success" ] ; then
+          workflow_status="success"
+          icon="\u2705"
+       else
+          workflow_status="failure"
+          icon="\u274C"
+       fi
+
+       memory_info=$(cat memory_info_modified.txt)
+       memory_info_escaped=$(echo "$memory_info" | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
+
+       payload='{
+        "blocks": [
+          {
+                "type": "header",
+                "text": {
+                "type": "plain_text",
+                "text": "'"$icon"' '"$workflow_status"'",
+                "emoji": true
+                    }
+          },
+          {
+            "type": "section",
+            "fields": [
+              {
+                "type": "mrkdwn",
+                "text": "*Repository:*\n'"$repo_name"'"
+              },
+              {
+                "type": "mrkdwn",
+                "text": "*Workflow Name:*\n'"$workflow_name"'"
+              },
+              {
+                "type": "mrkdwn",
+                "text": "*Commit Hash:*\n'"$commit_hash"'"
+              },
+              {
+                "type": "mrkdwn",
+                "text": "*Jobs:*\nBuild Release: '$BUILD_RELEASE'"
+              }
+            ]
+          },
+          {
+            "type": "context",
+            "elements": [
+              {
+                "type": "mrkdwn",
+                "text": "*Triggered by:* '"$user"'"
+              }
+            ]
+          },
+          {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": "*Memory Release:*\n'"$memory_info_escaped"'"
+          }
+        }
+        ]
+       }'
+
+        curl -X POST -H 'Content-type: application/json' --data "$payload" "$SLACK_WEBHOOK"
+    - name: Delete Memory Info
+      run: |
+        rm -f memory_info.txt
+        rm -f scan-build.txt
+        rm -f memory_info_modified.txt
+        rm -f warning_count.txt

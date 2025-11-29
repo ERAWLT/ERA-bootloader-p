@@ -1,0 +1,9 @@
+[submodule "mcuboot"]
+	path = mcuboot
+	url = ../mcuboot
+[submodule "hwlt-framework"]
+	path = hwlt-framework
+	url = ../hwlt-framework
+[submodule "libse"]
+	path = libse
+	url = ../libse

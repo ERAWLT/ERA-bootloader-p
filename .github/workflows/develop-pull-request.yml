@@ -1,0 +1,536 @@
+name: develop-pull-request
+
+on:
+
+  pull_request:
+    branches: [ "develop" ]
+
+  workflow_dispatch:
+
+jobs:
+  #build_debug:
+    #runs-on: self-hosted
+    #outputs:
+      #BUILD_DEBUG: ${{ job.status }}
+    #steps:
+    #- name: Checkout
+      #uses: actions/checkout@v4
+      #with:
+        #token: ${{ secrets.TOKEN }}
+        #submodules: recursive
+    #- name: Check Code Style
+      #run: |
+        #FILES=$(git diff --name-only origin/develop | grep -E '\.c$|\.cpp$|\.h$' || true)
+        #if [ -n "$FILES" ]; then
+          #clang-format-15 -style=file --dry-run -output-replacements-xml $FILES \
+            #2>&1 | tee /home/hw-admin/actions-runner/_work/hwlt-mcuboot/hwlt-mcuboot/output.txt || true
+          #warning_count=$(grep -o 'warning:' /home/hw-admin/actions-runner/_work/hwlt-mcuboot/hwlt-mcuboot/output.txt | wc -l || true)
+        #else
+          #echo "No C/C++ files to check."
+          #warning_count=0
+        #fi
+        #echo "Number of warnings: $warning_count" > warning_count.txt
+        #cat warning_count.txt
+    #- name: Upload warning count artifact
+      #uses: actions/upload-artifact@v4
+      #with:
+        #name: warning_count
+        #path: warning_count.txt
+    #- name: Create Docker container and build project
+      #run: |
+        #docker run -d --rm --name dockerenv -u $(id -u ${USER}):$(id -g ${USER}) -v $(pwd):/usr/src/app hw-docker-image:0.1 sleep infinity
+        #docker exec dockerenv sh -c "scan-build cmake . -DHWLT_BOARD_REVISION="h7v3" -DCMAKE_BUILD_TYPE=Debug && scan-build make 2>&1 | tee /usr/src/app/build_log.txt"
+        #docker exec dockerenv sh -c "grep -E 'Memory region|FLASH|DTCMRAM|RAM_D1|RAM_D2|RAM_D3|ITCMRAM' /usr/src/app/build_log.txt | grep -E '^[[:space:]]*Memory region|^ *[A-Z]' > /usr/src/app/memory_info.txt && grep -E 'scan-build:' /usr/src/app/build_log.txt | grep -E '^[[:space:]]*scan-build:' > /usr/src/app/scan-build.txt"
+        #python3 ./scripts/memory_info_format.py
+        #docker cp dockerenv:/usr/src/app/memory_info_modified.txt .
+        #docker cp dockerenv:/usr/src/app/scan-build.txt .
+    #- name: Save Memory Info as Artifact
+      #uses: actions/upload-artifact@v4
+      #with:
+        #name: memory-info
+        #path: memory_info_modified.txt
+    #- name: Save Scan-Build Info as Artifact
+      #uses: actions/upload-artifact@v4
+      #with:
+        #name: scan-build
+        #path: scan-build.txt
+    #- name: Copy and rename build result
+      #run: |
+        #commit_hash=$(echo "${{ github.sha }}" | cut -c 1-7)
+        #mv src/era-bootloader.bin "/home/hw-admin/ci/bootloader/test/${commit_hash}era-bootloader.bin"
+    #- name: Delete docker
+      #run: |
+        #docker stop dockerenv || true
+        #docker rm dockerenv || true
+      #if: ${{ always() }}
+    #- name: Delete Docker cache and images
+      #run: |
+        #docker system prune --all -f || true
+  build_release:
+    runs-on: self-hosted
+    outputs:
+      BUILD_RELEASE: ${{ job.status }}
+    steps:
+    - name: Checkout 
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.TOKEN }}
+        submodules: recursive
+    - name: Check Code Style
+      run: |
+        FILES=$(git diff --name-only origin/develop | grep -E '\.c$|\.cpp$|\.h$' || true)
+        if [ -n "$FILES" ]; then
+          clang-format-15 -style=file --dry-run -output-replacements-xml $FILES \
+            2>&1 | tee /home/hw-admin/actions-runner/_work/hwlt-mcuboot/hwlt-mcuboot/output.txt || true
+          warning_count=$(grep -o 'warning:' /home/hw-admin/actions-runner/_work/hwlt-mcuboot/hwlt-mcuboot/output.txt | wc -l || true)
+        else
+          echo "No C/C++ files to check."
+          warning_count=0
+        fi
+        echo "Number of warnings: $warning_count" > warning_count.txt
+        cat warning_count.txt
+    - name: Upload warning count artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: warning_count
+        path: warning_count.txt
+    - name: Create Docker container and build project
+      run: |
+        docker run -d --rm --name dockerenv -u $(id -u ${USER}):$(id -g ${USER}) -v $(pwd):/usr/src/app hw-docker-image:0.1 sleep infinity
+        docker exec dockerenv sh -c "cmake --fresh  -B buildReleaseSe -DCMAKE_BUILD_TYPE=Release -DHWLT_BOARD_REVISION="h7v3" && make -j8 -C buildReleaseSe 2>&1 | tee /usr/src/app/build_log.txt"
+        docker exec dockerenv sh -c "grep -E 'Memory region|FLASH|DTCMRAM|RAM_D1|RAM_D2|RAM_D3|ITCMRAM' /usr/src/app/build_log.txt | grep -E '^[[:space:]]*Memory region|^ *[A-Z]' > /usr/src/app/memory_info.txt"
+        python3 ./scripts/memory_info_format.py
+        docker cp dockerenv:/usr/src/app/memory_info_modified.txt ./memory_info_release_modified.txt
+        ls src/
+    - name: Save Memory Release Info as Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: memory-release-info
+        path: memory_info_release_modified.txt
+    #- name: Copy and rename build result
+      #run: |
+        #commit_hash=$(echo "${{ github.sha }}" | cut -c 1-7)
+        #mv build-release-h7v3/src/era-bootloader.bin "/home/hw-admin/ci/bootloader/test/${commit_hash}era-bootloader-release.bin"
+        #mv src/era-bootloader_signed.bin "/home/hw-admin/ci/bootloader/test/${commit_hash}era-bootloader-release_signed.bin"
+    - name: Delete docker
+      run: |
+        docker stop dockerenv || true
+        docker rm dockerenv || true
+      if: ${{ always() }}  
+    - name: Delete Docker cache and images
+      run: |
+        docker system prune --all -f || true
+
+  # send_file_to_stand:
+  #   runs-on: self-hosted
+  #   outputs:
+  #       SEND_RESULT: ${{ job.status }}
+  #   needs: build
+  #   steps:
+  #   - name: send file
+  #     run: |
+  #       commit_hash=$(echo "${{ github.sha }}" | cut -c 1-7)
+  #       response=$(curl -s "http:/${{ secrets.STAND_ADDRESS }}/get_bl_${commit_hash}/")
+  #       if [ "$response" == "Bootloader is loaded" ]; then
+  #         echo "Bootloader loaded successfully."
+  #       else
+  #         echo "Failed to load Bootloader."
+  #         exit 1
+  #       fi
+
+  # tests:
+  #   runs-on: self-hosted
+  #   outputs:
+  #       TEST_RESULT: ${{ job.status }}
+  #   needs: send_file_to_stand
+
+  #   steps:
+  #   - name: bl_01
+  #     run: |
+  #       response=$(curl -s "http://${{ secrets.STAND_ADDRESS }}/bl_01/")
+  #       echo "JSON Response: $response"
+  #       echo "{response}=${response}" >> $GITHUB_OUTPUT
+  #       status=$(echo "$response" | jq -r '.status')
+  #       if [ "$status" == "failed" ]; then
+  #         echo "Job failed because status is 'failed'."
+  #         exit 1
+  #       elif [ "$status" == "passed" ]; then
+  #         echo "Status is 'passed'. Continue job."
+  #       else
+  #         echo "Unknown status value: $status"
+  #         exit 1
+  #       fi
+  #     if: ${{ always() }}
+  #   - name: bl_02
+  #     run: |
+  #         response=$(curl -s "http://${{ secrets.STAND_ADDRESS }}/bl_02/")
+  #         echo "JSON Response: $response"
+  #         echo "{response}=${response}" >> $GITHUB_OUTPUT
+  #         status=$(echo "$response" | jq -r '.status')
+  #         if [ "$status" == "failed" ]; then
+  #           echo "Job failed because status is 'failed'."
+  #           exit 1
+  #         elif [ "$status" == "passed" ]; then
+  #           echo "Status is 'passed'. Continue job."
+  #         else
+  #           echo "Unknown status value: $status"
+  #           exit 1
+  #         fi
+  #     if: ${{ always() }}
+  #   - name: bl_03
+  #     run: |
+  #         response=$(curl -s "http://${{ secrets.STAND_ADDRESS }}/bl_03/")
+  #         echo "JSON Response: $response"
+  #         echo "{response}=${response}" >> $GITHUB_OUTPUT
+  #         status=$(echo "$response" | jq -r '.status')
+  #         if [ "$status" == "failed" ]; then
+  #           echo "Job failed because status is 'failed'."
+  #           exit 1
+  #         elif [ "$status" == "passed" ]; then
+  #           echo "Status is 'passed'. Continue job."
+  #         else
+  #           echo "Unknown status value: $status"
+  #           exit 1
+  #         fi
+  #     if: ${{ always() }}
+  #   - name: bl_04
+  #     run: |
+  #         response=$(curl -s "http://${{ secrets.STAND_ADDRESS }}/bl_04/")
+  #         echo "JSON Response: $response"
+  #         echo "{response}=${response}" >> $GITHUB_OUTPUT
+  #         status=$(echo "$response" | jq -r '.status')
+  #         if [ "$status" == "failed" ]; then
+  #           echo "Job failed because status is 'failed'."
+  #           exit 1
+  #         elif [ "$status" == "passed" ]; then
+  #           echo "Status is 'passed'. Continue job."
+  #         else
+  #           echo "Unknown status value: $status"
+  #           exit 1
+  #         fi
+  #     if: ${{ always() }}
+  #   - name: bl_05
+  #     run: |
+  #         response=$(curl -s "http://${{ secrets.STAND_ADDRESS }}/bl_05/")
+  #         echo "JSON Response: $response"
+  #         echo "{response}=${response}" >> $GITHUB_OUTPUT
+  #         status=$(echo "$response" | jq -r '.status')
+  #         if [ "$status" == "failed" ]; then
+  #           echo "Job failed because status is 'failed'."
+  #           exit 1
+  #         elif [ "$status" == "passed" ]; then
+  #           echo "Status is 'passed'. Continue job."
+  #         else
+  #           echo "Unknown status value: $status"
+  #           exit 1
+  #         fi
+  #     if: ${{ always() }}
+  #   - name: bl_06
+  #     run: |
+  #         response=$(curl -s "http://${{ secrets.STAND_ADDRESS }}/bl_06/")
+  #         echo "JSON Response: $response"
+  #         echo "{response}=${response}" >> $GITHUB_OUTPUT
+  #         status=$(echo "$response" | jq -r '.status')
+  #         if [ "$status" == "failed" ]; then
+  #           echo "Job failed because status is 'failed'."
+  #           exit 1
+  #         elif [ "$status" == "passed" ]; then
+  #           echo "Status is 'passed'. Continue job."
+  #         else
+  #           echo "Unknown status value: $status"
+  #           exit 1
+  #         fi
+  #     if: ${{ always() }}
+  #   - name: bl_07
+  #     run: |
+  #         response=$(curl -s "http://${{ secrets.STAND_ADDRESS }}/bl_07/")
+  #         echo "JSON Response: $response"
+  #         echo "{response}=${response}" >> $GITHUB_OUTPUT
+  #         status=$(echo "$response" | jq -r '.status')
+  #         if [ "$status" == "failed" ]; then
+  #           echo "Job failed because status is 'failed'."
+  #           exit 1
+  #         elif [ "$status" == "passed" ]; then
+  #           echo "Status is 'passed'. Continue job."
+  #         else
+  #           echo "Unknown status value: $status"
+  #           exit 1
+  #         fi
+  #     if: ${{ always() }}
+  #   - name: bl_08
+  #     run: |
+  #         response=$(curl -s "http://${{ secrets.STAND_ADDRESS }}/bl_08/")
+  #         echo "JSON Response: $response"
+  #         echo "{response}=${response}" >> $GITHUB_OUTPUT
+  #         status=$(echo "$response" | jq -r '.status')
+  #         if [ "$status" == "failed" ]; then
+  #           echo "Job failed because status is 'failed'."
+  #           exit 1
+  #         elif [ "$status" == "passed" ]; then
+  #           echo "Status is 'passed'. Continue job."
+  #         else
+  #           echo "Unknown status value: $status"
+  #           exit 1
+  #         fi
+  #     if: ${{ always() }}
+  #   - name: bl_09
+  #     run: |
+  #         response=$(curl -s "http://${{ secrets.STAND_ADDRESS }}/bl_09/")
+  #         echo "JSON Response: $response"
+  #         echo "{response}=${response}" >> $GITHUB_OUTPUT
+  #         status=$(echo "$response" | jq -r '.status')
+  #         if [ "$status" == "failed" ]; then
+  #           echo "Job failed because status is 'failed'."
+  #           exit 1
+  #         elif [ "$status" == "passed" ]; then
+  #           echo "Status is 'passed'. Continue job."
+  #         else
+  #           echo "Unknown status value: $status"
+  #           exit 1
+  #         fi
+  #     if: ${{ always() }}
+  #   - name: bl_10
+  #     run: |
+  #         response=$(curl -s "http://${{ secrets.STAND_ADDRESS }}/bl_10/")
+  #         echo "JSON Response: $response"
+  #         echo "{response}=${response}" >> $GITHUB_OUTPUT
+  #         status=$(echo "$response" | jq -r '.status')
+  #         if [ "$status" == "failed" ]; then
+  #           echo "Job failed because status is 'failed'."
+  #           exit 1
+  #         elif [ "$status" == "passed" ]; then
+  #           echo "Status is 'passed'. Continue job."
+  #         else
+  #           echo "Unknown status value: $status"
+  #           exit 1
+  #         fi
+  #     if: ${{ always() }}
+
+  #   - name: bl_11
+  #     run: |
+  #         response=$(curl -s "http://${{ secrets.STAND_ADDRESS }}/bl_11/")
+  #         echo "JSON Response: $response"
+  #         echo "{response}=${response}" >> $GITHUB_OUTPUT
+  #         status=$(echo "$response" | jq -r '.status')
+  #         if [ "$status" == "failed" ]; then
+  #           echo "Job failed because status is 'failed'."
+  #           exit 1
+  #         elif [ "$status" == "passed" ]; then
+  #           echo "Status is 'passed'. Continue job."
+  #         else
+  #           echo "Unknown status value: $status"
+  #           exit 1
+  #         fi
+  #     if: ${{ always() }}
+
+  #   - name: bl_12
+  #     run: |
+  #         response=$(curl -s "http://${{ secrets.STAND_ADDRESS }}/bl_12/")
+  #         echo "JSON Response: $response"
+  #         echo "{response}=${response}" >> $GITHUB_OUTPUT
+  #         status=$(echo "$response" | jq -r '.status')
+  #         if [ "$status" == "failed" ]; then
+  #           echo "Job failed because status is 'failed'."
+  #           exit 1
+  #         elif [ "$status" == "passed" ]; then
+  #           echo "Status is 'passed'. Continue job."
+  #         else
+  #           echo "Unknown status value: $status"
+  #           exit 1
+  #         fi
+  #     if: ${{ always() }}
+
+  #   - name: bl_13
+  #     run: |
+  #         response=$(curl -s "http://${{ secrets.STAND_ADDRESS }}/bl_13/")
+  #         echo "JSON Response: $response"
+  #         echo "{response}=${response}" >> $GITHUB_OUTPUT
+  #         status=$(echo "$response" | jq -r '.status')
+  #         if [ "$status" == "failed" ]; then
+  #           echo "Job failed because status is 'failed'."
+  #           exit 1
+  #         elif [ "$status" == "passed" ]; then
+  #           echo "Status is 'passed'. Continue job."
+  #         else
+  #           echo "Unknown status value: $status"
+  #           exit 1
+  #         fi
+  #     if: ${{ always() }}
+
+  #   - name: bl_14
+  #     run: |
+  #         response=$(curl -s "http://${{ secrets.STAND_ADDRESS }}/bl_14/")
+  #         echo "JSON Response: $response"
+  #         echo "{response}=${response}" >> $GITHUB_OUTPUT
+  #         status=$(echo "$response" | jq -r '.status')
+  #         if [ "$status" == "failed" ]; then
+  #           echo "Job failed because status is 'failed'."
+  #           exit 1
+  #         elif [ "$status" == "passed" ]; then
+  #           echo "Status is 'passed'. Continue job."
+  #         else
+  #           echo "Unknown status value: $status"
+  #           exit 1
+  #         fi
+  #     if: ${{ always() }}
+
+  #   - name: bl_15
+  #     run: |
+  #         response=$(curl -s "http://${{ secrets.STAND_ADDRESS }}/bl_15/")
+  #         echo "JSON Response: $response"
+  #         echo "{response}=${response}" >> $GITHUB_OUTPUT
+  #         status=$(echo "$response" | jq -r '.status')
+  #         if [ "$status" == "failed" ]; then
+  #           echo "Job failed because status is 'failed'."
+  #           exit 1
+  #         elif [ "$status" == "passed" ]; then
+  #           echo "Status is 'passed'. Continue job."
+  #         else
+  #           echo "Unknown status value: $status"
+  #           exit 1
+  #         fi
+  #     if: ${{ always() }}
+
+  #   - name: bl_16
+  #     run: |
+  #         response=$(curl -s "http://${{ secrets.STAND_ADDRESS }}/bl_16/")
+  #         echo "JSON Response: $response"
+  #         echo "{response}=${response}" >> $GITHUB_OUTPUT
+  #         status=$(echo "$response" | jq -r '.status')
+  #         if [ "$status" == "failed" ]; then
+  #           echo "Job failed because status is 'failed'."
+  #           exit 1
+  #         elif [ "$status" == "passed" ]; then
+  #           echo "Status is 'passed'. Continue job."
+  #         else
+  #           echo "Unknown status value: $status"
+  #           exit 1
+  #         fi
+  #     if: ${{ always() }}
+
+  # remove_file:
+  #    runs-on: self-hosted
+  #    needs: tests
+  #    steps:
+  #    - name: Remove
+  #      run: |
+  #        commit_hash=$(echo "${{ github.sha }}" | cut -c 1-7)
+  #        rm  /home/hw-admin/ci/bootloader/test/${commit_hash}era-bootloader.bin
+
+
+  Send_status_to_slack:
+    runs-on: self-hosted
+    needs: [build_release]
+    env:
+      #BUILD_DEBUG: ${{ needs.build_debug.outputs.BUILD_DEBUG }}
+      BUILD_RELEASE: ${{ needs.build_release.outputs.BUILD_RELEASE }}
+      
+    if: always()
+    steps:
+    #- name: Download Memory Debug Info Artifact
+      #uses: actions/download-artifact@v4
+      #with:
+        #name: memory-info
+    - name: Download Memory Release Info Artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: memory-release-info
+    #- name: Download Scan-build info Artifact
+      #uses: actions/download-artifact@v4
+      #with:
+        #name: scan-build
+    - name: Download warning count artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: warning_count
+        
+    - name: Send notification
+      env:
+        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
+      run: |
+       commit_hash=$(echo "${{ github.sha }}" | cut -c 1-7)
+       repo_name=$(echo "${{ github.repository }}")
+       workflow_name=$(echo "${{ github.workflow }}")
+       user=$(echo "${{ github.actor }}")
+
+       if [ "$BUILD_RELEASE" = "success" ] ; then
+          workflow_status="success"
+          icon="\u2705"
+       else
+          workflow_status="failure"
+          icon="\u274C"
+       fi
+
+       #scan_build=$(cat scan-build.txt)
+       #scan_build_escaped=$(echo "$scan_build" | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
+       #memory_info=$(cat memory_info_modified.txt)
+       #memory_info_escaped=$(echo "$memory_info" | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
+       memory_info_release=$(cat memory_info_release_modified.txt)
+       memory_info_release_escaped=$(echo "$memory_info_release" | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')
+       
+       warnings=$(cat warning_count.txt)
+
+       payload='{
+        "blocks": [
+          {
+                "type": "header",
+                "text": {
+                "type": "plain_text",
+                "text": "'"$icon"' '"$workflow_status"'",
+                "emoji": true
+                    }
+          },
+          {
+            "type": "section",
+            "fields": [
+              {
+                "type": "mrkdwn",
+                "text": "*Repository:*\n'"$repo_name"'"
+              },
+              {
+                "type": "mrkdwn",
+                "text": "*Workflow Name:*\n'"$workflow_name"'"
+              },
+              {
+                "type": "mrkdwn",
+                "text": "*Commit Hash:*\n'"$commit_hash"'"
+              },
+              {
+                "type": "mrkdwn",
+                "text": "*Jobs:*\nBuild Release: '$BUILD_RELEASE'"
+              }
+            ]
+          },
+          {
+            "type": "context",
+            "elements": [
+              {
+                "type": "mrkdwn",
+                "text": "*Triggered by:* '"$user"'"
+              }
+            ]
+          },
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": "*Memory Release:*\n'"$memory_info_release_escaped"'"
+          }
+        },
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": "*Code Style:*\n'"$warnings"'"
+          }
+        }
+        ]
+       }'
+
+        curl -X POST -H 'Content-type: application/json' --data "$payload" "$SLACK_WEBHOOK"
+    - name: Delete Memory Info
+      run: |
+        rm -f memory_info.txt
+        rm -f scan-build.txt
+        rm -f memory_info_modified.txt
+        rm -f warning_count.txt

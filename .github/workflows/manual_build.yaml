@@ -1,0 +1,66 @@
+name: manual_build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build_release_v3:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.TOKEN }}
+          submodules: recursive
+          ref: ${{ github.event.inputs.branch }}
+      - name: Extract build and base number
+        id: extract_build_num
+        run: |
+          buildnum=$(grep '#define VERSION_PROJECT_BUILDNUM' version_project.h | awk '{print $3}' | tr -d 'U' | tr -d '(' | tr -d ')' | awk -F '"' '{print $2}')
+          basenum=$(grep '#define VERSION_PROJECT_BASE' version_project.h | awk '{print $3}' | tr -d 'U' | tr -d '(' | tr -d ')' | awk -F '"' '{print $2}')
+          combinednum="${basenum}${buildnum}"
+          echo "::set-output name=combinednum::$combinednum"
+          echo $combinednum > combinednum.txt
+          cat combinednum.txt
+          echo "::set-output name=combinednum::$combinednum"
+      - name: Upload combinednum.txt as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: combinednum
+          path: combinednum.txt
+      - name: Create Docker container and build project
+        run: |
+          docker run -d --rm --name dockerenv -u $(id -u ${USER}):$(id -g ${USER}) -v $(pwd):/usr/src/app hw-docker-image:0.1 sleep infinity
+          docker exec dockerenv sh -c "cmake --fresh  -B buildReleaseSe -DCMAKE_BUILD_TYPE=Release -DHWLT_BOARD_REVISION="h7v3" && make -j8 -C buildReleaseSe 2>&1 | tee /usr/src/app/build_log.txt"
+          docker exec dockerenv sh -c "awk '/Signed part digest:/ {getline; print > \"/usr/src/app/digest.txt\"}' /usr/src/app/build_log.txt"
+          docker cp dockerenv:/usr/src/app/digest.txt ./digest.txt
+          docker cp dockerenv:/usr/src/app/buildReleaseSe/src/era-bootloader.bin ./era-bootloader.bin
+      - name: Download combinednum artifact
+        uses: actions/download-artifact@v4
+        with:
+           name: combinednum
+           path: .
+      - name: Read combinednum value
+        id: read_combinednum
+        run: |
+           combinednum=$(cat combinednum.txt)
+           echo "Extracted combinednum: $combinednum"
+           echo "::set-output name=combinednum::$combinednum"
+      - name: Rename firmware file with version
+        run: |
+           combinednum=$(cat combinednum.txt)
+           mv ./era-bootloader.bin "./era-bootloader_{combinednum}_signed.bin"
+           cp ././era-bootloader_{combinednum}_signed.bin /home/hw-admin/netdisk/Releases/BL/
+      - name: Rename digest file
+        run: |
+            combinednum=$(cat combinednum.txt)
+            mv ./digest.txt "./bl_${combinednum}.txt"
+            cp ${combinednum}.txt /home/hw-admin/netdisk/Releases/BL/
+      - name: Delete docker
+        run: |
+          docker stop dockerenv || true
+          docker rm dockerenv || true
+        if: ${{ always() }}
+      - name: Delete Docker cache and images
+        run: |
+          docker system prune --all -f || true

@@ -1,0 +1,25 @@
+SET(CMAKE_COLOR_MAKEFILE ON)
+SET(CMAKE_ERROR_DEPRECATED ON)
+SET(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# Reconfigure build strategy based on keyword in build type.
+if(CMAKE_BUILD_TYPE MATCHES "Uart")
+    message("General: Uart logger enabled.")
+    set(CONFIG_DEBUG_UART_ENABLED   ON)
+    set(CONFIG_SHELL_ENABLED        OFF)
+elseif(CMAKE_BUILD_TYPE MATCHES "Shell")
+    message("General: Shell enabled.")
+    set(CONFIG_DEBUG_UART_ENABLED   ON)
+    set(CONFIG_SHELL_ENABLED        ON)
+endif()
+
+if(CMAKE_BUILD_TYPE MATCHES "Debug")
+    if(CMAKE_BUILD_TYPE MATCHES "Wdg")
+        option(CMAKE_DEBUG_USE_WDG "Enable watchdog" ON)
+    else()
+        option(CMAKE_DEBUG_USE_WDG "Enable watchdog" OFF)
+    endif()
+    message("Debug: watchdog ${CMAKE_DEBUG_USE_WDG}")
+endif()
+
+option(CONFIG_WALLET_USE_MBEDTLS "Select MBEDTLS as cryptography library" ON)

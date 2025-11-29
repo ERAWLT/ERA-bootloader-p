@@ -1,0 +1,125 @@
+name: update_version
+
+on:
+  push:
+    branches: [ "develop" ]
+
+  workflow_dispatch:
+  
+jobs:
+  update_build_number:
+    runs-on: self-hosted
+    outputs:
+      UPDATE_VERSION: ${{ job.status }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.TOKEN }}
+        submodules: recursive
+    - name: Run buildnum_inc.sh script
+      run: |
+        /home/hw-admin/actions-runner/_work/buildnum_inc.sh version_project.h
+    - name: Extract build and base number
+      id: extract_build_num
+      run: |
+        buildnum=$(grep '#define VERSION_PROJECT_BUILDNUM' version_project.h | awk '{print $3}' | tr -d 'U' | tr -d '(' | tr -d ')' | awk -F '"' '{print $2}')
+        basenum=$(grep '#define VERSION_PROJECT_BASE' version_project.h | awk '{print $3}' | tr -d 'U' | tr -d '(' | tr -d ')' | awk -F '"' '{print $2}')
+        combinednum="${basenum}${buildnum}"
+        echo "::set-output name=combinednum::$combinednum"
+        echo $combinednum > combinednum.txt
+        cat combinednum.txt
+        echo "::set-output name=combinednum::$combinednum"
+    - name: Upload combinednum.txt as artifact
+      uses: actions/upload-artifact@v4
+      with:
+          name: combinednum
+          path: combinednum.txt
+    - name: Commit with updated version
+      run: |
+        git config --global user.email "actions@github.com"
+        git config --global user.name "GitHub Actions"
+        git add version_project.h
+        git commit -m "Update version [skip ci]"
+    - name: Push changes to develop branch
+      run: |
+        git push origin develop
+
+  Send_status_to_slack:
+    runs-on: self-hosted
+    needs: [update_build_number]
+    env:
+       UPDATE_VERSION: ${{ needs.update_build_number.outputs.UPDATE_VERSION }}
+      
+    if: always()
+    steps:
+    - name: Download version info Artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: combinednum
+        
+    - name: Send notification
+      env:
+        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
+      run: |
+       commit_message=$(echo "${{ github.event.head_commit.message }}")
+       commit_hash=$(echo "${{ github.sha }}" | cut -c 1-7)
+       branch_name=$(basename "${{ github.event.ref }}")
+       user=$(echo "${{ github.actor }}")
+       combinednum=$(cat combinednum.txt)
+
+       if [ "$UPDATE_VERSION" = "success" ] ; then
+          workflow_status="success"
+          icon="\u2705"
+       else
+          workflow_status="failure"
+          icon="\u274C"
+       fi
+
+       payload='{
+        "blocks": [
+          {
+                "type": "header",
+                "text": {
+                "type": "plain_text",
+                "text": "'"$icon"' Version Update!",
+                "emoji": true
+                    }
+          },
+          {
+            "type": "section",
+            "fields": [
+              {
+                "type": "mrkdwn",
+                "text": "*Commit Hash:*\n'"$commit_hash"'"
+              },
+              {
+                "type": "mrkdwn",
+                "text": "*Commit Message:*\n'"$commit_message"'"
+              },
+              {
+                "type": "mrkdwn",
+                "text": "*Branch:*\n'"$branch_name"'"
+              },
+              {
+                "type": "mrkdwn",
+                "text": "*The version has been upgraded:*\n'"$combinednum"'"
+              }
+            ]
+          },
+          {
+            "type": "context",
+            "elements": [
+              {
+                "type": "mrkdwn",
+                "text": "*Triggered by:* '"$user"'"
+              }
+            ]
+          }
+        ]
+       }'
+
+        curl -X POST -H 'Content-type: application/json' --data "$payload" "$SLACK_WEBHOOK"
+    - name: Delete Info
+      run: |
+        rm -f combinednum.txt

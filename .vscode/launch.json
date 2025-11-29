@@ -1,0 +1,87 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        /*it's work on device (linux mint + gdb-multiarch)*/
+        {
+            "name": "debug device (launch)",
+            "preLaunchTask": "build debug",
+            "request": "launch",
+            "type": "cortex-debug",
+            "servertype": "openocd", // "stutil", // 
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/src/era-bootloader",
+            "runToEntryPoint": "main",
+            "svdFile": "${workspaceFolder}/.vscode/STM32H743.svd",
+            "device": "STM32H743AIIx",
+            "configFiles": [
+                "${workspaceFolder}/.vscode/openocd_stm32h7.cfg"
+            ],
+            "interface": "swd",
+            "rtos": "FreeRTOS",
+            "showDevDebugOutput": "raw",
+            "showDevDebugTimestamps": false,
+            "preLaunchCommands": [
+                "set mem inaccessible-by-default off",
+                "monitor reset init",
+                "monitor halt",
+                "monitor arm semihosting enable",
+                "set verbose on"
+            ]
+        },
+        /*it's work on device (linux mint + gdb-multiarch)*/
+        {
+            "name": "Debug device external (attach, launch)",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/build-custom-h7v1/src/era-bootloader", // build debug debugV2
+            "request": "attach", // "launch", //  
+            "type": "cortex-debug",
+            "runToEntryPoint": "main", // app_main
+            "preLaunchTask": "start debug",
+            "postDebugTask": "close debug",
+            "servertype": "external",
+            // "preRestartCommands" : [ "load", "enable breakpoint", "monitor reset" ], // for  stutil
+            "interface": "swd",
+            "rtos": "FreeRTOS",
+            "targetId": 1,
+            // "device": "STM32H743AIIx",
+            // "svdFile": "${workspaceFolder}/.vscode/STM32H743.svd",
+            "device": "STM32H753AIIx",
+            "svdFile": "${workspaceFolder}/.vscode/STM32H753.svd",
+            "configFiles": [
+                "${workspaceFolder}/.vscode/openocd_stm32h7.cfg"
+            ],
+            "showDevDebugOutput": "raw",
+            "showDevDebugTimestamps": false,
+            "gdbTarget": "127.0.0.1:50000",
+        },
+        {
+            "name": "debug v3 device via preset (launch)",
+            "preLaunchTask": "build debug BLR via preset",
+            "request": "launch",
+            "type": "cortex-debug",
+            "servertype": "openocd",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/build-debug-h7v3/src/era-bootloader",
+            "runToEntryPoint": "main",
+            "svdFile": "${workspaceFolder}/.vscode/STM32H753.svd",
+            "device": "STM32H753AIIx",
+            "configFiles": [
+                "${workspaceFolder}/.vscode/openocd_stm32h7.cfg"
+            ],
+            "interface": "swd",
+            "rtos": "FreeRTOS",
+            "showDevDebugOutput": "raw",
+            "showDevDebugTimestamps": false,
+            "preLaunchCommands": [
+                "set mem inaccessible-by-default off",
+                "monitor reset init",
+                "monitor halt",
+                "monitor arm semihosting enable",
+                "set verbose on"
+            ]
+        }
+    ]
+}
