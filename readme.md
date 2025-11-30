@@ -1,6 +1,9 @@
 # ERA-Bootloader 🛡️  
 This firmware is ERA-wallet's bootloader based on [MCUboot](https://github.com/mcu-tools/mcuboot), a secure bootloader for 32-bit microcontrollers.
 
+> ⚠️ **Open Source Status Notice**  
+> While ERA is committed to full open-source transparency, this repository is currently only partially open. Certain proprietary components remain private due to ongoing refactoring, audits and pending patent applications. **As a result, this code cannot be compiled or built independently.** The published source code is provided for reference and review purposes only. We are actively working toward making all code fully open source once these processes are complete.
+
 ## 📂 Repository Structure
 | Directory      | Description |
 | ----------- | ----------------- |
