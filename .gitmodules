@@ -1,6 +1,6 @@
 [submodule "mcuboot"]
 	path = mcuboot
-	url = ../mcuboot
+	url = https://github.com/ERAWLT/mcuboot-p.git
 [submodule "hwlt-framework"]
 	path = hwlt-framework
 	url = ../hwlt-framework
